@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather App</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #87ceeb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        
+        .weather-app {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 80%;
+            max-width: 1200px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .weather-info {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #error-message {
+            color: red;
+            margin-top: 20px;
+        }
+
+        #city-name {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        #temperature {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        #description {
+            font-size: 15px;
+            margin-bottom: 10px;
+        }
+
+        #weather-icon {
+            width: 100px;
+        }
+
+        .nearby-weather-container {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .weather-box {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: inline-block;
+            width: 300px;
+            text-align: center;
+        }
+
+        .weather-box img {
+            width: 50px;
+            height: 50px;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="weather-app">
+        <h1>Weather App</h1>
+        <div id="weather-info" class="weather-info">
+            <h2 id="city-name"></h2>
+            <h3 id="temperature"></h3>
+            <p id="description"></p>
+            <img id="weather-icon" alt="Weather Icon">
+        </div>
+        <p id="error-message"></p>
+        <div id="nearby-weather-container" class="nearby-weather-container">
+            <h3>Weather in Nearby Locations</h3>
+            <div id="nearby-weather"></div>
+        </div>
+        <div id="map"></div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        const apiKey = "c384b6ef56e8a4b41b8cba7ddae918eb"; // Replace with your actual API key
+
+        // Initialize the map
+        const map = L.map('map').setView([36.737232, 3.086472], 8); // Center map on Algeria
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Function to fetch weather data for a specific location
+        async function fetchWeatherForLocation(lat, lon) {
+            const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error("Error fetching weather data:", error);
+                return null;
+            }
+        }
+
+        // Function to fetch nearby cities using OpenWeatherMap API
+        async function fetchNearbyCities(lat, lon) {
+            const url = `https://api.openweathermap.org/data/2.5/find?lat=${lat}&lon=${lon}&cnt=50&units=metric&appid=${apiKey}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                // Filter cities to only include those in Algeria
+                return data.list.filter(city => city.sys.country === 'DZ');
+            } catch (error) {
+                console.error("Error fetching nearby cities:", error);
+                return [];
+            }
+        }
+
+        // Function to update the UI with weather data for your location
+        async function updateCurrentLocationWeather(latitude, longitude) {
+            const data = await fetchWeatherForLocation(latitude, longitude);
+            if (data) {
+                document.getElementById("city-name").textContent = data.name;
+                document.getElementById("temperature").textContent = `${data.main.temp}°C`;
+                document.getElementById("description").textContent = data.weather[0].description;
+                document.getElementById("weather-icon").src = `http://openweathermap.org/img/w/${data.weather[0].icon}.png`;
+                document.getElementById("weather-info").style.display = "block";
+            } else {
+                document.getElementById("error-message").textContent = "Unable to retrieve weather data for your location.";
+            }
+        }
+
+        // Function to update the UI with weather data for the nearest locations and place markers on the map
+        async function updateNearbyWeather(latitude, longitude) {
+            const container = document.getElementById("nearby-weather");
+            container.innerHTML = ""; // Clear previous content
+
+            const nearbyCities = await fetchNearbyCities(latitude, longitude);
+
+            // Limit to the top 3 Algerian cities
+            for (const city of nearbyCities.slice(0, 3)) {
+                const data = await fetchWeatherForLocation(city.coord.lat, city.coord.lon);
+                if (data) {
+                    const weatherBox = document.createElement("div");
+                    weatherBox.classList.add("weather-box");
+
+                    weatherBox.innerHTML = `
+                        <h4>${city.name}</h4>
+                        <p>${data.main.temp}°C</p>
+                        <p>${data.weather[0].description}</p>
+                        <img src="http://openweathermap.org/img/w/${data.weather[0].icon}.png" alt="${data.weather[0].description}">
+                    `;
+
+                    container.appendChild(weatherBox);
+
+                    // Add a marker for each city on the map
+                    L.marker([city.coord.lat, city.coord.lon])
+                        .addTo(map)
+                        .bindPopup(`<b>${city.name}</b><br>${data.main.temp}°C<br>${data.weather[0].description}`);
+                } else {
+                    const errorBox = document.createElement("div");
+                    errorBox.classList.add("weather-box");
+                    errorBox.textContent = `Could not retrieve weather data for ${city.name}.`;
+                    container.appendChild(errorBox);
+                }
+            }
+        }
+
+        // Function to get user's current location
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async position => {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+
+                    // Fetch and display weather for the current location
+                    await updateCurrentLocationWeather(latitude, longitude);
+
+                    // Fetch and display weather for nearby locations and update the map
+                    await updateNearbyWeather(latitude, longitude);
+                }, () => {
+                    document.getElementById("error-message").textContent = "Unable to retrieve your location.";
+                });
+            } else {
+                document.getElementById("error-message").textContent = "Geolocation is not supported by this browser.";
+            }
+        }
+
+        // Initialize weather fetching on page load
+        window.addEventListener("load", () => {
+            getLocation();
+        });
+    </script>
+</body>
+</html>
